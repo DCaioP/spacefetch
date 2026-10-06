@@ -27,3 +27,7 @@ memory usage band: `sun`, `rocky`, `gas`, `ice`, `comet` and `hole`.
 
 Draws the block at the top of the screen and keeps it animated while you type at the first
 prompt. The animation stops at the first command, on Ctrl+L, or after 10 minutes.
+
+## License
+
+[GPL-3.0-or-later](LICENSE). Forks and modified versions you distribute must stay open under the same license.
