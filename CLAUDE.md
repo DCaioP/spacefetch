@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A fastfetch-style terminal greeter: one of six celestial bodies from the `token-space` Claude Code mod, animated in truecolor beside a box of system info. Bun + TypeScript, no runtime dependencies. README and shell comments are in Portuguese; code comments are in English.
+A fastfetch-style terminal greeter: one of six celestial bodies from the `token-space` Claude Code mod, animated in truecolor beside a box of system info. Bun + TypeScript, no runtime dependencies. Open source: keep everything (code, comments, docs, commit messages) in English.
 
 ## Commands
 
@@ -15,7 +15,7 @@ A fastfetch-style terminal greeter: one of six celestial bodies from the `token-
     bun src/main.ts --percent 95         # pick the zone by a (fake) memory fill
     bun src/main.ts --seconds 0 --static # single frame
     bun src/main.ts --static --clear     # single frame at the top of a cleared screen
-    bun src/main.ts --loop --shell PID   # background repaint of rows 1..N until PID dies / SIGTERM / 10 min
+    bun src/main.ts --loop --shell PID --columns C --rows R   # background repaint of rows 1..N until PID dies / SIGTERM / 10 min
 
 Requires `fastfetch` on PATH (system info) and Linux `/proc/meminfo` (memory percent).
 
@@ -32,4 +32,6 @@ Pipeline per frame (`src/main.ts`): `sysinfo` → `zones` → `panel` (built onc
 
 ### Shell integration (`spacefetch.zsh`)
 
-`spacefetch_start` picks the body once in zsh (both processes must draw the same one), runs `--static --clear`, then spawns `--loop --shell $$` disowned (`&!`). The loop saves the cursor (`ESC 7`), repaints rows from 1, restores the cursor (`ESC 8`), wrapped in synchronized output (`?2026`) and issued as a **single write** so the kernel never interleaves it with the shell's output. It stops on `preexec` and Ctrl+L (output would scroll the block away and the loop would paint over it). In the loop each line is erased (`2K`) *before* painting — erasing after a full-width line would wipe the panel's right border.
+`spacefetch_start` picks the body once in zsh (both processes must draw the same one), runs `--static --clear`, then spawns `--loop --shell $$` disowned (`&!`). The loop saves the cursor (`ESC 7`), repaints rows from 1, restores the cursor (`ESC 8`), wrapped in synchronized output (`?2026`) and issued as a **single write** so the kernel never interleaves it with the shell's output. It stops on `preexec` and Ctrl+L (output would scroll the block away and the loop would paint over it).
+
+The loop runs with stdio off the terminal (`>/dev/null 2>&1`) and writes to its own `/dev/tty` fd, taking the size from `--columns`/`--rows`. This is load-bearing: Bun saves the termios of a tty stdout at start and restores it on exit, so a loop killed by `preexec` would flip the next program (claude, vim) back to cooked/echo mode, and its mouse and focus reports would show up as `^[[<…M` text. Keep the loop's stdout away from the tty. In the loop each line is erased (`2K`) *before* painting — erasing after a full-width line would wipe the panel's right border.

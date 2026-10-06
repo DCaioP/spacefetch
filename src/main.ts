@@ -5,10 +5,10 @@
 //   spacefetch [--zone Z] [--percent N] [--seconds S]   animate in the foreground, keep the last frame
 //   spacefetch --static [--clear]                       one frame; --clear puts it at the top of a clean screen
 //   spacefetch --loop [--shell PID] [--seconds S]       keep animating the block at the top of the screen,
-//                                                       in the background, while the prompt below takes input
+//              [--columns C --rows R]                   in the background, while the prompt below takes input
 //
 // `--loop` assumes the block sits at row 1, where `--static --clear` drew it. spacefetch.zsh runs the two.
-import { writeSync } from 'node:fs'
+import { openSync, writeSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { renderBody } from './canvas'
 import { renderPanel } from './panel'
@@ -34,6 +34,8 @@ const { values } = parseArgs({
     clear: { type: 'boolean', default: false },
     loop: { type: 'boolean', default: false },
     shell: { type: 'string' },
+    columns: { type: 'string' },
+    rows: { type: 'string' },
   },
 })
 
@@ -51,16 +53,23 @@ const zone =
   : zoneOfBody(BODIES[Math.floor(Math.random() * BODIES.length)]!)
 const panel = renderPanel(zone, percent, entries, PANEL_WIDTH)
 
-const columns = process.stdout.columns ?? 120
-const layout = planLayout(columns, process.stdout.rows ?? 40, PANEL_WIDTH, panel.length)
+const columns = Number(values.columns ?? process.stdout.columns ?? 120)
+const layout = planLayout(columns, Number(values.rows ?? process.stdout.rows ?? 40), PANEL_WIDTH, panel.length)
 
 function frame(t: number): string[] {
   return compose(layout, renderBody(zone.body, t, layout.scale, layout.fieldWidth), panel, PANEL_WIDTH, columns)
 }
 
+/**
+ * Where frames go. `--loop` opens the tty itself and runs with stdout away from it: Bun saves the
+ * mode of a tty stdout at start and puts it back on exit, which would undo the raw mode of
+ * whatever the prompt launched meanwhile (claude, vim) and leave its input echoed and cooked.
+ */
+const out = values.loop ? openSync('/dev/tty', 'w') : 1
+
 /** One write per frame: the kernel never interleaves a single tty write with the shell's. */
 function write(text: string) {
-  writeSync(1, text)
+  writeSync(out, text)
 }
 
 /** Synchronized output, so the terminal swaps the frame whole. */
@@ -88,9 +97,10 @@ function isAlive(pid: number): boolean {
 
 if (values.loop) {
   // Save the cursor wherever the shell left it, paint the block from row 1, put the cursor back.
+  // Exit at once: the handler runs between frames, never in the middle of a write.
+  process.on('SIGTERM', () => process.exit(0))
+  process.on('SIGHUP', () => process.exit(0))
   let isStopped = false
-  process.on('SIGTERM', () => (isStopped = true))
-  process.on('SIGHUP', () => (isStopped = true))
   const shell = values.shell !== undefined ? Number(values.shell) : undefined
   const isDone = () => isStopped || (shell !== undefined && !isAlive(shell))
 
